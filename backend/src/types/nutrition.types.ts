@@ -1,6 +1,6 @@
 export interface NutritionInput {
     age: number,
-    gender: 'male' | 'female',
+    sex: 'male' | 'female',
     height : number,
     weight : number,
     activityLevel : 'sedentary' | 'light' | 'moderate' | 'active' | 'very-active' |,

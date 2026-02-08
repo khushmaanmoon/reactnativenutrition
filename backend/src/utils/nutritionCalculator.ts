@@ -5,7 +5,7 @@ export function calculateNutrition(
 ): NutritionResult {
   const {
     age,
-    gender,
+    sex,
     height,
     weight,
     activityLevel,
@@ -14,7 +14,7 @@ export function calculateNutrition(
 
   // Mifflin-St Jeor
   const bmr =
-    gender === 'male'
+    sex === 'male'
       ? 10 * weight + 6.25 * height - 5 * age + 5
       : 10 * weight + 6.25 * height - 5 * age - 161;
 
