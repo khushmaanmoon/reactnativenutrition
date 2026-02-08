@@ -1,20 +1,19 @@
-//Using this file to create and export the express server, not using it for running or listening here. 
+// Using this file to create and export the express server
 
 import express from 'express';
-import nutritionRoutes from "./routes/nutrition.routes"
-import healthRoutes from "./routes/health.routes"
 import cors from 'cors';
 
+import nutritionRoutes from './routes/nutrition.routes';
+import healthRoutes from './routes/health.routes';
+
 const app = express();
-app.use(express.json());
+
+// 🔹 global middleware
 app.use(cors());
+app.use(express.json());
 
-app.get("/health", (req, res) => {
-    res.json({status : 'ok'})
-});
-
-app.use('/api', nutritionRoutes)
-app.use("/health", healthRoutes);
-
+// 🔹 routes
+app.use('/health', healthRoutes);
+app.use('/api', nutritionRoutes);
 
 export default app;
