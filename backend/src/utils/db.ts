@@ -1,10 +1,11 @@
 import mysql from 'mysql2/promise';
 import fs from 'fs';
 
-const ssl =
-  process.env.DB_CA
-    ? { ca: fs.readFileSync(process.env.DB_CA) }
-    : undefined;
+const caPath = process.env.DB_CA?.trim();
+
+const ssl = caPath
+  ? { ca: fs.readFileSync(caPath) }
+  : undefined;
 
 export const db = mysql.createPool({
   host: process.env.DB_HOST,
