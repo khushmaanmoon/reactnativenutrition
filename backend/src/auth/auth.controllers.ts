@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { db } from '../utils/db';
@@ -40,13 +39,6 @@ export async function tokenProvider(
       });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 8 characters long',
-      });
-    }
-
     /** 1️⃣ Check if user already exists */
     const [existing] = await db.query<DbUserRow[]>(
       'SELECT id FROM users WHERE email = ? LIMIT 1',
@@ -61,11 +53,9 @@ export async function tokenProvider(
     }
 
     /** 2️⃣ Insert user */
-    const passwordHash = await bcrypt.hash(password, 10);
-
     const [result] = await db.query<ResultSetHeader>(
       'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
-      [name, email, passwordHash]
+      [name, email, password]
     );
 
     const userId = result.insertId;
@@ -120,9 +110,7 @@ export async function loginProvider(
     }
 
     const userRow = rows[0];
-    const isPasswordValid = await bcrypt.compare(password, userRow.password);
-
-    if (!isPasswordValid) {
+    if (password !== userRow.password) {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
