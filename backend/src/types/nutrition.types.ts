@@ -3,7 +3,7 @@ export interface NutritionInput {
     sex: 'male' | 'female',
     height : number,
     weight : number,
-    activityLevel : 'sedentary' | 'light' | 'moderate' | 'active' | 'very-active',
+    activityLevel : 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active',
     goal : 'fat_loss' | 'maintenance' | 'muscle_gain'
 }
 

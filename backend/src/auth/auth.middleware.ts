@@ -1,9 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-//Adding the user into the current database table, then will use the same table for making the changes
+import { JWT_SECRET } from './auth.config';
 
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key';
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -34,7 +32,7 @@ export default function verifyToken(
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded; // attach payload for controllers
-    console.log(req.user);
+    
     next(); // ✅ move to next middleware/controller
   } catch (err) {
     return res.status(401).json({

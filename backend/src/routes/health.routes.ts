@@ -3,7 +3,7 @@ import {db} from '../utils/db'
 
 const router = Router();
 
-router.get('/health', async (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const [rows] = await db.query('SELECT name FROM users');
     console.log(rows);
