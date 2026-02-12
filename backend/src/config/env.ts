@@ -6,6 +6,12 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+function getBooleanEnv(name: string, defaultValue: boolean): boolean {
+  const value = process.env[name];
+  if (value === undefined) return defaultValue;
+  return value.toLowerCase() === 'true';
+}
+
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: Number(process.env.PORT || 4000),
@@ -16,4 +22,9 @@ export const ENV = {
   DB_PASSWORD: getRequiredEnv('DB_PASSWORD'),
   DB_NAME: getRequiredEnv('DB_NAME'),
   DB_CA: process.env.DB_CA,
+  DB_SSL: getBooleanEnv('DB_SSL', true),
+  DB_SSL_REJECT_UNAUTHORIZED: getBooleanEnv(
+    'DB_SSL_REJECT_UNAUTHORIZED',
+    false
+  ),
 };
