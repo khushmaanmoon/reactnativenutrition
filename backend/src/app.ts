@@ -10,6 +10,7 @@ import protectTestRoute from "./routes/protect.routes"
 import trainingRoutes from './routes/training.routes';
 import mealsRoutes from './routes/meals.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import measurementsRoutes from './routes/measurements.routes';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/api', nutritionRoutes);
 app.use('/api', trainingRoutes);
 app.use('/api', mealsRoutes);
 app.use('/api', dashboardRoutes);
+app.use('/api', measurementsRoutes);
 app.use('/auth', authRoutes);
 app.use('/protect', protectTestRoute)
 export default app;
