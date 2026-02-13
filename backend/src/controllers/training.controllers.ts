@@ -36,6 +36,31 @@ type SessionLogEntry = {
   weights: number;
 };
 
+type SessionHistoryRow = RowDataPacket & {
+  session_id: number;
+  session_date: Date;
+  total_volume: number | null;
+  exercises_logged: number;
+};
+
+type WeeklyVolumeRow = RowDataPacket & {
+  year_week: number;
+  week_start: Date;
+  week_end: Date;
+  total_volume: number | null;
+  sessions_count: number;
+};
+
+type PrRawRow = RowDataPacket & {
+  exercise_id: number;
+  exercise_name: string;
+  weights: number;
+  reps: number | null;
+  sets: number | null;
+  volume: number | null;
+  session_date: Date;
+};
+
 function getCurrentWeek(startDate: Date): number {
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
@@ -326,4 +351,180 @@ export async function assignProgram(req : AuthRequest, res : Response){
     } finally {
       connection.release();
     }
+}
+
+function parseDateParam(value?: string): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+export async function getTrainingHistory(
+  req: AuthRequest,
+  res: Response
+): Promise<Response> {
+  const userId = Number(req.user?.userId);
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized',
+    });
+  }
+
+  const rawFrom = Array.isArray(req.query.from) ? req.query.from[0] : req.query.from;
+  const rawTo = Array.isArray(req.query.to) ? req.query.to[0] : req.query.to;
+  const fromDate = parseDateParam(rawFrom as string | undefined);
+  const toDate = parseDateParam(rawTo as string | undefined);
+
+  if ((rawFrom && !fromDate) || (rawTo && !toDate)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid date format in query. Use YYYY-MM-DD.',
+    });
+  }
+
+  const to = toDate ?? new Date();
+  to.setHours(0, 0, 0, 0);
+  const from = fromDate ?? new Date(to);
+  if (!fromDate) {
+    from.setDate(from.getDate() - 30);
+  }
+
+  try {
+    const [sessionRows] = await db.query<SessionHistoryRow[]>(
+      `SELECT
+         s.id AS session_id,
+         s.session_date,
+         SUM(w.volume) AS total_volume,
+         COUNT(w.id) AS exercises_logged
+       FROM sessions s
+       LEFT JOIN workouts w ON w.session_id = s.id
+       WHERE s.user_id = ?
+         AND s.session_date BETWEEN ? AND ?
+       GROUP BY s.id, s.session_date
+       ORDER BY s.session_date DESC`,
+      [userId, from, to]
+    );
+
+    const [weeklyRows] = await db.query<WeeklyVolumeRow[]>(
+      `SELECT
+         YEARWEEK(s.session_date, 1) AS year_week,
+         MIN(s.session_date) AS week_start,
+         MAX(s.session_date) AS week_end,
+         SUM(w.volume) AS total_volume,
+         COUNT(DISTINCT s.id) AS sessions_count
+       FROM sessions s
+       JOIN workouts w ON w.session_id = s.id
+       WHERE s.user_id = ?
+         AND s.session_date BETWEEN ? AND ?
+       GROUP BY YEARWEEK(s.session_date, 1)
+       ORDER BY year_week DESC`,
+      [userId, from, to]
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        from,
+        to,
+        sessions: sessionRows.map((row) => ({
+          sessionId: row.session_id,
+          sessionDate: row.session_date,
+          totalVolume: Number(row.total_volume || 0),
+          exercisesLogged: row.exercises_logged,
+        })),
+        weekly: weeklyRows.map((row) => ({
+          yearWeek: row.year_week,
+          weekStart: row.week_start,
+          weekEnd: row.week_end,
+          totalVolume: Number(row.total_volume || 0),
+          sessionsCount: row.sessions_count,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('Training history fetch error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch training history',
+    });
+  }
+}
+
+export async function getTrainingPrs(
+  req: AuthRequest,
+  res: Response
+): Promise<Response> {
+  const userId = Number(req.user?.userId);
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized',
+    });
+  }
+
+  try {
+    const [rows] = await db.query<PrRawRow[]>(
+      `SELECT
+         w.exercise_id,
+         e.name AS exercise_name,
+         w.weights,
+         w.reps,
+         w.sets,
+         w.volume,
+         s.session_date
+       FROM workouts w
+       JOIN sessions s ON s.id = w.session_id
+       JOIN exercises e ON e.id = w.exercise_id
+       WHERE s.user_id = ?
+       ORDER BY w.exercise_id ASC, w.weights DESC, s.session_date DESC`,
+      [userId]
+    );
+
+    const grouped = new Map<number, PrRawRow[]>();
+    for (const row of rows) {
+      if (!grouped.has(row.exercise_id)) {
+        grouped.set(row.exercise_id, []);
+      }
+      grouped.get(row.exercise_id)?.push(row);
+    }
+
+    const prs = Array.from(grouped.values()).map((exerciseRows) => {
+      const top = exerciseRows[0];
+      const previous =
+        exerciseRows.find((row) => row.weights < top.weights) || null;
+
+      return {
+        exerciseId: top.exercise_id,
+        exerciseName: top.exercise_name,
+        prWeight: top.weights,
+        prDate: top.session_date,
+        prReps: top.reps,
+        prSets: top.sets,
+        prVolume: top.volume,
+        previousPrWeight: previous?.weights ?? null,
+        deltaWeight:
+          previous && previous.weights !== null
+            ? top.weights - previous.weights
+            : null,
+      };
+    });
+
+    prs.sort((a, b) => b.prWeight - a.prWeight);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        prs,
+      },
+    });
+  } catch (error) {
+    console.error('PR fetch error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch PR data',
+    });
+  }
 }
