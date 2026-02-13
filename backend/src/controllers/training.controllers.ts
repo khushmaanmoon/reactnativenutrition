@@ -29,6 +29,13 @@ type ProgramExerciseRow = RowDataPacket & {
   exercise_name: string;
 };
 
+type SessionLogEntry = {
+  exerciseId: number;
+  sets: number;
+  reps: number;
+  weights: number;
+};
+
 function getCurrentWeek(startDate: Date): number {
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
@@ -41,6 +48,109 @@ function getCurrentWeek(startDate: Date): number {
   const computedWeek = Math.floor(daysSinceStart / 7) + 1;
 
   return Math.max(1, Math.min(6, computedWeek));
+}
+
+export async function logTrainingSession(
+  req: AuthRequest,
+  res: Response
+): Promise<Response> {
+  const userId = Number(req.user?.userId);
+  const { sessionDate, entries } = req.body as {
+    sessionDate?: string;
+    entries?: SessionLogEntry[];
+  };
+
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized',
+    });
+  }
+
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'entries are required',
+    });
+  }
+
+  const normalizedEntries = entries.map((entry) => ({
+    exerciseId: Number(entry.exerciseId),
+    sets: Number(entry.sets),
+    reps: Number(entry.reps),
+    weights: Number(entry.weights),
+  }));
+
+  const hasInvalidEntry = normalizedEntries.some(
+    (entry) =>
+      !entry.exerciseId ||
+      entry.sets <= 0 ||
+      entry.reps <= 0 ||
+      entry.weights < 0
+  );
+
+  if (hasInvalidEntry) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid session entry values',
+    });
+  }
+
+  const dateToUse = sessionDate ? new Date(sessionDate) : new Date();
+  if (Number.isNaN(dateToUse.getTime())) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid sessionDate',
+    });
+  }
+  dateToUse.setHours(0, 0, 0, 0);
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [sessionInsert] = await connection.query<ResultSetHeader>(
+      `INSERT INTO sessions (user_id, session_date)
+       VALUES (?, ?)`,
+      [userId, dateToUse]
+    );
+
+    const sessionId = sessionInsert.insertId;
+    let totalVolume = 0;
+
+    for (const entry of normalizedEntries) {
+      const volume = entry.sets * entry.reps * entry.weights;
+      totalVolume += volume;
+
+      await connection.query<ResultSetHeader>(
+        `INSERT INTO workouts
+           (session_id, sets, reps, weights, volume, exercise_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [sessionId, entry.sets, entry.reps, entry.weights, volume, entry.exerciseId]
+      );
+    }
+
+    await connection.commit();
+    return res.status(201).json({
+      success: true,
+      data: {
+        sessionId,
+        userId,
+        sessionDate: dateToUse,
+        exercisesLogged: normalizedEntries.length,
+        totalVolume,
+      },
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Session log error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to log training session',
+    });
+  } finally {
+    connection.release();
+  }
 }
 
 export async function trainingProgram(
