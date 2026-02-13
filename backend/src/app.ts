@@ -7,6 +7,7 @@ import nutritionRoutes from './routes/nutrition.routes';
 import healthRoutes from './routes/health.routes';
 import authRoutes from './auth/auth.routes';
 import protectTestRoute from "./routes/protect.routes"
+import trainingRoutes from './routes/training.routes';
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 // 🔹 routes
 app.use('/health', healthRoutes);
 app.use('/api', nutritionRoutes);
+app.use('/api', trainingRoutes);
 app.use('/auth', authRoutes);
 app.use('/protect', protectTestRoute)
 export default app;
